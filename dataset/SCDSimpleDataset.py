@@ -11,7 +11,7 @@ import codecs
 
 
 # Style change detection dataset
-class SCDPartsDataset(Dataset):
+class SCDSimpleDataset(Dataset):
     """
     Style change detection dataset
     """
@@ -165,4 +165,4 @@ class SCDPartsDataset(Dataset):
         # end for
     # end _load
 
-# end SCDPartsDataset
+# end SCDSimpleDataset
