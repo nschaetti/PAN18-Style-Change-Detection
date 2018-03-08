@@ -23,8 +23,6 @@ for i, data in enumerate(pan18loader):
     print(u"Inputs : {}".format(inputs.size()))
     print(u"Labels : {}".format(labels.size()))
     print(u"Class : {}".format(c))
-    plt.plot(labels[0].numpy())
-    plt.show()
 # end for
 
 print(pan18loader.dataset.changes_char)
