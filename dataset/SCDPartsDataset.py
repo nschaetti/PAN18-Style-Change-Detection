@@ -115,7 +115,7 @@ class SCDPartsDataset(Dataset):
                 transformed, transformed_size = self.transform(part)
 
                 # Add to parts
-                parts.append((transformed, transformed_size))
+                parts.append(transformed)
 
                 # New last position
                 last_position = position
@@ -123,17 +123,17 @@ class SCDPartsDataset(Dataset):
 
             # Add last part
             transformed, transformed_size = self.transform(sample_text[last_position:])
-            parts.append((transformed, transformed_size))
+            parts.append(transformed)
         else:
             # Transform
             transformed, transformed_size = self.transform(sample_text)
-            parts.append((transformed, transformed_size))
+            parts.append(transformed)
         # end if
 
         # Class
         c = 1 if changes else 0
 
-        return parts, c
+        return parts, list([c])
     # end __getitem__
 
     ##########################################
