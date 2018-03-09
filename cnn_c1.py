@@ -5,26 +5,34 @@
 import torch.utils.data
 import dataset
 from echotorch.transforms import text
+from torch.autograd import Variable
 import numpy as np
+from modules import CNND
+import torch.nn as nn
+from torch import optim
 
 # Experience parameter
 batch_size = 64
 n_epoch = 1
-window_size = 700
+window_size = 500
 training_set_size = 10
 test_set_size = 2
 training_samples = training_set_size + test_set_size
 stride = 100
+voc_size = 838
+
+# Transformer
+transform = text.Character()
 
 # Style change detection dataset, training set
 pan18loader_train = torch.utils.data.DataLoader(
-    dataset.SCDPartsDataset(root='./data/', download=True, transform=text.Character(), train=True),
+    dataset.SCDPartsDataset(root='./data/', download=True, transform=transform, train=True),
     batch_size=1
 )
 
 # Style change detection dataset, validation set
 pan18loader_valid = torch.utils.data.DataLoader(
-    dataset.SCDSimpleDataset(root='./data/', download=True, transform=text.Character(), train=False),
+    dataset.SCDSimpleDataset(root='./data/', download=True, transform=transform, train=False),
     batch_size=1
 )
 
@@ -45,11 +53,20 @@ for i, data in enumerate(pan18loader_train):
 # Batches
 batches = list()
 
+# Models
+net = CNND(vocab_size=voc_size, window_size=window_size)
+
+# Loss function
+loss_function = nn.NLLLoss()
+
+# Optimizer
+optimizer = optim.SGD(net.parameters(), lr=0.001)
+
 # For each training samples
 for i in range(training_samples):
     # Batch
-    batch = torch.zeros(batch_size, window_size*2)
-    batch_truth = torch.zeros(batch_size)
+    batch = torch.LongTensor(batch_size, window_size*2)
+    batch_truth = torch.LongTensor(batch_size)
 
     # Batch size
     for b in range(batch_size):
@@ -120,13 +137,23 @@ for epoch in range(n_epoch):
         # Inputs and label
         inputs, label = batch
 
-        # TRAINING
+        # To variable
+        inputs, label = Variable(inputs), Variable(label)
+
+        # Zero grad
+        net.zero_grad()
+
+        # Compute output
+        log_probs = net(inputs)
     # end for
 
     # For each validation sample
     for batch in test_set:
         # Inputs and label
         inputs, label = batch
+
+        # To variable
+        inputs, labels = Variable(inputs), Variable(label)
 
         # VALIDATE
     # end for
@@ -145,6 +172,7 @@ for epoch in range(n_epoch):
 
         # Get each parts
         for j in torch.arange(0, inputs.size(1)-window_size, stride):
+            j = int(j)
             # Add
             parts.append(inputs[:, j:j+window_size])
         # end for
@@ -180,7 +208,7 @@ for epoch in range(n_epoch):
         # end if
 
         # Test
-        if label == predicted_class:
+        if label[0] == predicted_class:
             successes += 1.0
         # end if
         total += 1.0
@@ -189,3 +217,4 @@ for epoch in range(n_epoch):
     # Show
     print(u"Epoch {}, accuracy : {}".format(epoch, 100.0 * successes / total))
 # end for
+
