@@ -2,29 +2,43 @@
 #
 
 # Imports
+import copy
 import torch.utils.data
+from torch import nn
+from torch import optim
+from torch import
 import dataset
-from echotorch.transforms import text
+from torchlanguage import transforms
 import numpy as np
+from torchlanguage import models
+from settings import functions
+from settings import settings
+from torch.autograd import Variable
+import math
 
 # Experience parameter
 batch_size = 64
 n_epoch = 1
 window_size = 700
-training_set_size = 10
-test_set_size = 2
-training_samples = training_set_size + test_set_size
+validation_ratio = 0.1
+training_samples = 50000
 stride = 100
+
+# Argument parser
+args = functions.argument_parser_training_model()
+
+# Get transforms
+transforms = functions.text_transformer(args.n_gram, settings.window_size)
 
 # Style change detection dataset, training set
 pan18loader_train = torch.utils.data.DataLoader(
-    dataset.SCDPartsDataset(root='./data/', download=True, transform=text.Character2Gram(), train=True),
+    dataset.SCDPartsDataset(root='./data/', download=True, transform=transforms, train=True),
     batch_size=1
 )
 
 # Style change detection dataset, validation set
 pan18loader_valid = torch.utils.data.DataLoader(
-    dataset.SCDSimpleDataset(root='./data/', download=True, transform=text.Character2Gram(), train=False),
+    dataset.SCDSimpleDataset(root='./data/', download=True, transform=transforms, train=False),
     batch_size=1
 )
 
@@ -109,36 +123,63 @@ for i in range(training_samples):
     batches.append((batch, batch_truth))
 # end for
 
-# Training and test sets
-training_set = batches[:training_set_size]
-test_set = batches[training_set_size:]
+# Loss function
+loss_function = nn.MSELoss()
+
+# Bi-directional Embedding GRU
+model = models.CNNCDist()
+if args.cuda:
+    model.cuda()
+# end if
+best_model = copy.deepcopy(model.state_dict())
+best_acc = 0.0
+
+# Optimizer
+optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 # For each iteration
 for epoch in range(n_epoch):
+    # Total losses
+    training_loss = 0.0
+    training_total = 0.0
+
     # For each training examples
-    for batch in training_set:
+    for batch in batches:
         # Inputs and label
-        inputs, label = batch
+        inputs, truth = batch
+
+        # To variable
+        inputs, truth = Variable(inputs), Variable(truth)
+        if args.cuda:
+            inputs, truth = inputs.cuda(), truth.cuda()
+        # end if
+
+        # Set gradient to zero
+        model.zero_grad()
 
         # TRAINING
-    # end for
+        model_output = model(inputs)
 
-    # For each validation sample
-    for batch in test_set:
-        # Inputs and label
-        inputs, label = batch
+        # Loss
+        loss = loss_function(model_output, truth)
 
-        # VALIDATE
+        # Add
+        training_loss += loss.data[0]
+        training_total += 1.0
+
+        # Backward and step
+        loss.backward()
+        optimizer.step()
     # end for
 
     # Counters
-    successes = 0
-    total = 0
+    test_diff = 0
+    test_total = 0
 
     # For each test sample
     for i, data in enumerate(pan18loader_valid):
         # Parts and c
-        inputs, label = data
+        inputs, truth = data
 
         # Different parts to measure
         parts = list()
@@ -152,40 +193,25 @@ for epoch in range(n_epoch):
         # Number of parts
         n_parts = len(parts)
 
-        # Similarity matrix
-        similarity_matrix = np.zeros((n_parts, n_parts))
-
         # For all combination
         for n in range(n_parts):
             for m in range(n_parts):
                 # Inputs
                 concate = torch.cat((parts[n], parts[m]), dim=1)
 
-                # EXEC
+                # Model
+                model_output = model(inputs)
 
-                # Set
-                similarity_matrix[n, m] = 0
+                # Diff
+                dist = truth - float(model_output[0])
+                test_diff += dist
+
+                # Total
+                test_total += 1.0
             # end for
         # end for
-
-        # Maximum distance
-        max_distance = np.max(similarity_matrix)
-
-        # Predicted class
-        threshold = 0.9
-        if max_distance > threshold:
-            predicted_class = 1
-        else:
-            predicted_class = 0
-        # end if
-
-        # Test
-        if label == predicted_class:
-            successes += 1.0
-        # end if
-        total += 1.0
     # end for
 
     # Show
-    print(u"Epoch {}, accuracy : {}".format(epoch, 100.0 * successes / total))
+    print(u"Epoch {}, accuracy : {}".format(epoch, 1.0 / test_total * math.sqrt(test_diff)))
 # end for
