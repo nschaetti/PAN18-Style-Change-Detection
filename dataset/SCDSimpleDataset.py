@@ -96,7 +96,7 @@ class SCDSimpleDataset(Dataset):
         changes = sample_truth['changes']
 
         # Transform
-        transformed, transformed_size = self.transform(sample_text)
+        transformed = self.transform(sample_text)
 
         # Class
         c = 1 if changes else 0
