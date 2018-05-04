@@ -183,7 +183,7 @@ def load_models(model_type, n_gram, cuda=False):
     # end if
 
     # Load tweet model
-    model, voc = models.cnnscd25(n_gram=n_gram, map_location=None)
+    model, voc = models.cnnscd25(n_gram=n_gram, map_location=map_location)
     if cuda:
         model.cuda()
     else:
