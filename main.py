@@ -36,9 +36,6 @@ from tools import settings, functions
 # Parse arguments
 args = functions.argument_parser_execution()
 
-# CNN text transformer
-transforms = functions.text_transformer_cnn(settings.cnn_window_size, args.n_gram)
-
 # Counters
 success = 0.0
 total = 0.0
@@ -49,6 +46,9 @@ model, voc = functions.load_models(
     n_gram=args.n_gram,
     cuda=args.cuda
 )
+
+# CNN text transformer
+transforms = functions.text_transformer_cnn(settings.cnn_window_size, args.n_gram, voc)
 
 # Style Change Detection dataset
 scd_dataset = dataset.TIRASCDDataset(root=args.input_dataset, transform=transforms)

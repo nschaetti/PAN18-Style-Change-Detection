@@ -104,7 +104,7 @@ def text_transformer(n_gram, window_size):
 
 
 # Get text transformer
-def text_transformer_cnn(window_size, n_gram):
+def text_transformer_cnn(window_size, n_gram, token_to_ix):
     """
     Get text transformer for CNNSCD
     :param window_size:
@@ -115,7 +115,7 @@ def text_transformer_cnn(window_size, n_gram):
         return ltransforms.Compose([
             ltransforms.ToLower(),
             ltransforms.Character(),
-            ltransforms.ToIndex(start_ix=1),
+            ltransforms.ToIndex(start_ix=1, token_to_ix=token_to_ix),
             ltransforms.ToLength(length=window_size),
             ltransforms.Reshape((-1)),
             ltransforms.MaxIndex(max_id=settings.voc_sizes[n_gram])
@@ -124,7 +124,7 @@ def text_transformer_cnn(window_size, n_gram):
         return ltransforms.Compose([
             ltransforms.ToLower(),
             ltransforms.Character2Gram(),
-            ltransforms.ToIndex(start_ix=1),
+            ltransforms.ToIndex(start_ix=1, token_to_ix=token_to_ix),
             ltransforms.ToLength(length=window_size),
             ltransforms.Reshape((-1)),
             ltransforms.MaxIndex(max_id=settings.voc_sizes[n_gram])
