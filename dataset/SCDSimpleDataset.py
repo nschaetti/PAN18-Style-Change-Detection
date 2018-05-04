@@ -99,9 +99,9 @@ class SCDSimpleDataset(Dataset):
         transformed = self.transform(sample_text)
 
         # Class
-        c = 1.0 if changes else 0.0
+        c = 1 if changes else 0
 
-        return transformed, c
+        return transformed, c, sample_truth['positions']
     # end __getitem__
 
     ##########################################
