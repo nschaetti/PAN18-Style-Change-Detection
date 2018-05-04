@@ -2,6 +2,7 @@
 #
 
 # Imports
+import os
 import copy
 import torch.utils.data
 from torch import nn
@@ -132,8 +133,18 @@ for epoch in range(args.epoch):
         best_acc = accuracy
         print(u"Saving model with best accuracy {}".format(best_acc))
         torch.save(
-            (transforms.transforms[2].token_to_ix, model.state_dict()),
-            open(args.output, 'wb')
+            transforms.transforms[2].token_to_ix,
+            open(
+                os.path.join(args.output, "cnnscd25.voc.pth"),
+                mode='wb'
+            )
+        )
+        torch.save(
+            model.state_dict(),
+            open(
+                os.path.join(args.output, "cnnscd25.pth"),
+                mode='wb'
+            )
         )
     # end if
 # end epoch
