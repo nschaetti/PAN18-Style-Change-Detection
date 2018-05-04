@@ -4,12 +4,14 @@
 # Imports
 from torchlanguage import transforms as ltransforms
 from torchvision import transforms
-import argparse
+from torchlanguage import models
 import dataset
+import argparse
 import torch
 import settings
 import os
 import codecs
+import json
 
 #################
 # Arguments
@@ -26,9 +28,15 @@ def argument_parser_training_model():
     parser = argparse.ArgumentParser(description="PAN18 Author Profiling challenge")
 
     # Argument
+    parser.add_argument("--root", type=str, help="Dataset root", default='./root/')
     parser.add_argument("--output", type=str, help="Model output file", default='.')
     parser.add_argument("--dim", type=int, help="Embedding dimension", default=300)
     parser.add_argument("--n-gram", type=str, help="N-Gram (c1, c2)", default='c1')
+    parser.add_argument("--n-filters", type=int, help="Number of filters", default=500)
+    parser.add_argument("--n-linear", type=int, help="Number of linear layer", default=2)
+    parser.add_argument("--linear-size", type=int, help="Linear layer size", default=1500)
+    parser.add_argument("--max-pool-size", type=int, help="Max pooling size", default=700)
+    parser.add_argument("--max-pool-stride", type=int, help="Max pooling stride", default=350)
     parser.add_argument("--no-cuda", action='store_true', default=False, help="Enables CUDA training")
     parser.add_argument("--epoch", type=int, help="Epoch", default=300)
     parser.add_argument("--batch-size", type=int, help="Batch size", default=20)
@@ -96,22 +104,63 @@ def text_transformer(n_gram, window_size):
     # end if
 # end tweet_transformer
 
+
+# Get text transformer
+def text_transformer_cnn(window_size, n_gram):
+    """
+    Get text transformer for CNNSCD
+    :param window_size:
+    :param n_gram:
+    :return:
+    """
+    if n_gram == 'c1':
+        return ltransforms.Compose([
+            ltransforms.ToLower(),
+            ltransforms.Character(),
+            ltransforms.ToIndex(start_ix=1),
+            ltransforms.ToLength(length=window_size),
+            ltransforms.Reshape((-1)),
+            ltransforms.MaxIndex(max_id=settings.voc_sizes[n_gram])
+        ])
+    else:
+        return ltransforms.Compose([
+            ltransforms.ToLower(),
+            ltransforms.Character2Gram(),
+            ltransforms.ToIndex(start_ix=1),
+            ltransforms.ToLength(length=window_size),
+            ltransforms.Reshape((-1)),
+            ltransforms.MaxIndex(max_id=settings.voc_sizes[n_gram])
+        ])
+    # end if
+# end text_transformer_cnn
+
+
 #################
 # Dataset
 #################
 
 
 # Import data set
-def load_dataset(lang, text_transform, batch_size, val_batch_size):
+def load_dataset(transforms, batch_size, root='./data/'):
     """
-    Import tweets data set
-    :param lang:
-    :param text_transform:
+    Import data set
+    :param transforms:
     :param batch_size:
-    :param val_batch_size:
+    :param root
     :return:
     """
-    pass
+    # Style change detection dataset, training set
+    pan18loader_train = torch.utils.data.DataLoader(
+        dataset.SCDSimpleDataset(root=root, download=True, transform=transforms, train=True),
+        batch_size=batch_size
+    )
+
+    # Style change detection dataset, validation set
+    pan18loader_valid = torch.utils.data.DataLoader(
+        dataset.SCDSimpleDataset(root=root, download=True, transform=transforms, train=False),
+        batch_size=batch_size
+    )
+    return pan18loader_train, pan18loader_valid
 # end load_dataset
 
 
@@ -121,23 +170,27 @@ def load_dataset(lang, text_transform, batch_size, val_batch_size):
 
 
 # Load models
-def load_models(model_file, voc_file, cuda=False):
+def load_models(n_gram, cuda=False):
     """
     Load models
-    :param model_file:
+    :param image_model:
     :param cuda:
     :return:
     """
+    # Map location
+    if not cuda:
+        map_location = 'cpu'
+    else:
+        map_location = None
+    # end if
+
     # Load tweet model
-    model = torch.load(open(model_file, 'rb'))
+    model, voc = models.cnnscd25(n_gram=n_gram, map_location=map_location)
     if cuda:
         model.cuda()
     else:
         model.cpu()
     # end if
-
-    # Load model vocabulary
-    voc = torch.load(open(voc_file, 'rb'))
 
     return model, voc
 # end load_models
@@ -148,35 +201,28 @@ def load_models(model_file, voc_file, cuda=False):
 
 
 # Save results
-def save_result(output, author_id, lang, gender_txt, gender_img, gender_both):
+def save_result(output, problem_file, predicted):
     """
     Save results
     :param output:
-    :param author_id:
-    :param gender_txt:
-    :param gender_img:
-    :param gender_both:
+    :param problem_file:
+    :param predicted:
     :return:
     """
     # File output
-    file_output = os.path.join(output, author_id + ".xml")
+    file_output = os.path.join(output, problem_file)
 
     # Log
-    print(u"Writing result for {} to {}".format(author_id, file_output))
+    print(u"Writing result for {} to {}".format(problem_file, file_output))
+
+    # JSON data
+    predicted_output = {"changes": predicted}
 
     # Open
-    f = codecs.open(os.path.join(output, author_id + ".xml"), 'w', encoding='utf-8')
+    f = codecs.open(file_output, 'w', encoding='utf-8')
 
     # Write
-    f.write(u"<author id=\"{}\" lang=\"{}\" gender_txt=\"{}\" gender_img=\"{}\" gender_comb=\"{}\"/>".
-            format(
-                    author_id,
-                    lang,
-                    settings.idx_to_class[int(gender_txt[0])],
-                    settings.idx_to_class[int(gender_img[0])],
-                    settings.idx_to_class[int(gender_both[0])]
-            )
-    )
+    json.dump(predicted_output, f)
 
     # Close
     f.close()

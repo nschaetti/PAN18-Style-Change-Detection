@@ -11,7 +11,8 @@ from torchvision import transforms
 ################
 
 # Settings
-window_size = 20
+cnn_window_size = 11400
+gru_window_size = 20
 hidden_dim = 500
 voc_sizes = {'c1': 1628, 'c2': 21510}
 class_to_idx = {False: 0, True: 1}
