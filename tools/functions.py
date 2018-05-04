@@ -30,7 +30,7 @@ def argument_parser_training_model():
     # Argument
     parser.add_argument("--root", type=str, help="Dataset root", default='./root/')
     parser.add_argument("--output", type=str, help="Model output file", default='.')
-    parser.add_argument("--dim", type=int, help="Embedding dimension", default=300)
+    parser.add_argument("--dim", type=int, help="Embedding dimension", default=50)
     parser.add_argument("--n-gram", type=str, help="N-Gram (c1, c2)", default='c1')
     parser.add_argument("--n-filters", type=int, help="Number of filters", default=500)
     parser.add_argument("--n-linear", type=int, help="Number of linear layer", default=2)
@@ -63,10 +63,8 @@ def argument_parser_execution():
     parser.add_argument("--input-run", type=str, help="Input run", required=True)
     parser.add_argument("--model", type=str, help="Image model", required=True)
     parser.add_argument("--n-gram", type=str, help="N-Gram (c1, c2)", default='c1')
-    parser.add_argument("--no-cuda", action='store_true', default=False, help="Enables CUDA training")
-    parser.add_argument("--batch-size", type=int, help="Batch size", default=1)
     args = parser.parse_args()
-    args.cuda = not args.no_cuda and torch.cuda.is_available()
+    args.cuda = False
     return args
 # end argument_parser_execution
 
@@ -170,7 +168,7 @@ def load_dataset(transforms, batch_size, root='./data/'):
 
 
 # Load models
-def load_models(n_gram, cuda=False):
+def load_models(model_type, n_gram, cuda=False):
     """
     Load models
     :param image_model:
@@ -185,7 +183,7 @@ def load_models(n_gram, cuda=False):
     # end if
 
     # Load tweet model
-    model, voc = models.cnnscd25(n_gram=n_gram, map_location=map_location)
+    model, voc = models.cnnscd25(n_gram=n_gram, map_location=None)
     if cuda:
         model.cuda()
     else:
@@ -213,7 +211,7 @@ def save_result(output, problem_file, predicted):
     file_output = os.path.join(output, problem_file)
 
     # Log
-    print(u"Writing result for {} to {}".format(problem_file, file_output))
+    print(u"Writing result {} for {} to {}".format(predicted, problem_file, file_output))
 
     # JSON data
     predicted_output = {"changes": predicted}
