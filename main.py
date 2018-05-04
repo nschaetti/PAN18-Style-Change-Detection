@@ -45,6 +45,7 @@ total = 0.0
 
 # Load models and voc
 model, voc = functions.load_models(
+    model_type=args.model,
     n_gram=args.n_gram,
     cuda=args.cuda
 )
@@ -71,5 +72,5 @@ for data in pan18loader:
     _, predicted = torch.max(model_output.data, 1)
 
     # Write
-    functions.save_result(args.output, scd_dataset.truth_files[-1], False if int(predicted[0]) == 0 else True)
+    functions.save_result(args.output_dir, scd_dataset.truth_files[-1], False if int(predicted[0]) == 0 else True)
 # end for
