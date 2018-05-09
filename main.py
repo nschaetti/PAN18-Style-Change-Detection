@@ -42,7 +42,6 @@ total = 0.0
 
 # Load models and voc
 model, voc = functions.load_models(
-    model_type=args.model,
     n_gram=args.n_gram,
     cuda=args.cuda
 )
