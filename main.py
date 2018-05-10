@@ -41,13 +41,10 @@ success = 0.0
 total = 0.0
 
 # Load models and voc
-model, voc = functions.load_models(
-    n_gram=args.n_gram,
-    cuda=args.cuda
-)
+model, voc = functions.load_models()
 
 # CNN text transformer
-transforms = functions.text_transformer_cnn(settings.cnn_window_size, args.n_gram, voc)
+transforms = functions.text_transformer_cnn(settings.cnn_window_size, 'c1', voc)
 
 # Style Change Detection dataset
 scd_dataset = dataset.TIRASCDDataset(root=args.input_dataset, transform=transforms)
