@@ -61,8 +61,6 @@ def argument_parser_execution():
     parser.add_argument("--input-dataset", type=str, help="Input dataset", required=True)
     parser.add_argument("--output-dir", type=str, help="Where to put results", required=True)
     parser.add_argument("--input-run", type=str, help="Input run", required=True)
-    parser.add_argument("--model", type=str, help="Image model", required=True)
-    parser.add_argument("--n-gram", type=str, help="N-Gram (c1, c2)", default='c1')
     args = parser.parse_args()
     args.cuda = False
     return args
@@ -168,27 +166,19 @@ def load_dataset(transforms, batch_size, root='./data/'):
 
 
 # Load models
-def load_models(model_type, n_gram, cuda=False):
+def load_models():
     """
     Load models
-    :param image_model:
+    :param n_gram:
     :param cuda:
     :return:
     """
     # Map location
-    if not cuda:
-        map_location = 'cpu'
-    else:
-        map_location = None
-    # end if
+    map_location = 'cpu'
 
     # Load tweet model
-    model, voc = models.cnnscd25(n_gram=n_gram, map_location=map_location)
-    if cuda:
-        model.cuda()
-    else:
-        model.cpu()
-    # end if
+    model, voc = models.cnnscd25(n_gram='c1', map_location=map_location)
+    model.cpu()
 
     return model, voc
 # end load_models
