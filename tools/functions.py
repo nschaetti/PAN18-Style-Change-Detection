@@ -173,11 +173,8 @@ def load_models():
     :param cuda:
     :return:
     """
-    # Map location
-    map_location = 'cpu'
-
     # Load tweet model
-    model, voc = models.cnnscd25(n_gram='c1', map_location=map_location)
+    model, voc = models.cnnscd25(n_gram='c1', map_location=lambda storage, loc: storage)
     model.cpu()
 
     return model, voc
