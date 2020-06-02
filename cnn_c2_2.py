@@ -11,13 +11,6 @@ import numpy as np
 from torchlanguage import models
 from tools import functions, settings
 from torch.autograd import Variable
-import math
-
-# Experience parameter
-batch_size = 64
-n_epoch = 1
-validation_ratio = 0.1
-training_samples = 5000
 
 # Argument parser
 args = functions.argument_parser_training_model()
@@ -27,13 +20,13 @@ transforms = functions.text_transformer_cnn(args.n_gram)
 
 # Style change detection dataset, training set
 pan18loader_train = torch.utils.data.DataLoader(
-    dataset.SCDPartsDataset(root='./extended/', download=True, transform=transforms, train=True),
+    dataset.SCDPartsDataset(root='./data/', download=True, transform=transforms, train=True),
     batch_size=1
 )
 
 # Style change detection dataset, validation set
 pan18loader_valid = torch.utils.data.DataLoader(
-    dataset.SCDSimpleDataset(root='./extended/', download=True, transform=transforms, train=False),
+    dataset.SCDSimpleDataset(root='./data/', download=True, transform=transforms, train=False),
     batch_size=1
 )
 
@@ -55,13 +48,15 @@ for i, data in enumerate(pan18loader_train):
 batches = list()
 
 # For each training samples
-for i in range(training_samples):
+same = True
+for i in range(settings.training_samples):
     # Batch
     batch = torch.LongTensor(args.batch_size, settings.cnn_window_size * 2).fill_(0)
-    batch_truth = torch.zeros(args.batch_size)
+    batch_truth = torch.LongTensor(args.batch_size).fill_(0)
 
     # Batch size
-    for b in range(args.batch_size):
+    b = 0
+    while b < args.batch_size:
         # Pick a random sample
         random_sample = np.random.randint(0, n_samples)
 
@@ -70,7 +65,7 @@ for i in range(training_samples):
         n_parts = len(parts)
 
         # Negative or positive example?
-        if n_parts == 1:
+        if n_parts == 1 and same:
             # Pick a random part
             random_part = parts[np.random.randint(0, n_parts)]
             part_length = random_part.size(1)
@@ -84,8 +79,18 @@ for i in range(training_samples):
             side2 = random_part[:, start_pos2:start_pos2 + settings.cnn_window_size]
 
             # Truth
-            batch_truth[b] = 0.0
-        else:
+            batch_truth[b] = 0
+
+            # Concatenate
+            sides = torch.cat((side1, side2), dim=1)
+
+            # Set
+            batch[b] = sides
+            
+            # Not same next time
+            same = False
+            b += 1
+        elif n_parts > 1 and not same:
             # Pick to consecutive random parts
             random_start_part = np.random.randint(0, n_parts-1)
             random_part1 = parts[random_start_part]
@@ -104,25 +109,43 @@ for i in range(training_samples):
             side2 = random_part2[:, start_pos2:start_pos2 + settings.cnn_window_size]
 
             # Truth
-            batch_truth[b] = 1.0
+            batch_truth[b] = 1
+
+            # Concatenate
+            sides = torch.cat((side1, side2), dim=1)
+
+            # Set
+            batch[b] = sides
+
+            # Not same next time
+            same = True
+            b += 1
         # end if
-
-        # Concatenate
-        sides = torch.cat((side1, side2), dim=1)
-
-        # Set
-        batch[b] = sides
-    # end for
+    # end while
 
     # Add to batch
     batches.append((batch, batch_truth))
 # end for
 
-# Loss function
-loss_function = nn.MSELoss()
+# Training and validation
+total_size = len(batches)
+validation_size = int(total_size * settings.validation_ratio)
+training_size = total_size - validation_size
+training_set = batches[:training_size]
+validation_set = batches[training_size:]
 
-# Bi-directional Embedding GRU
-model = models.CNNCDist(window_size=settings.cnn_window_size, vocab_size=settings.voc_sizes[args.n_gram])
+# Loss function
+loss_function = nn.CrossEntropyLoss()
+
+# CNN Distance learning
+# model = models.CNNCDist(window_size=settings.cnn_window_size, vocab_size=settings.voc_sizes[args.n_gram], n_classes=2)
+model = models.CNNCDist(
+    window_size=settings.cnn_window_size,
+    vocab_size=settings.voc_sizes[args.n_gram],
+    n_classes=2,
+    temporal_division=args.temporal_division,
+    out_channels=(args.n_filters, args.n_filters, args.n_filters)
+)
 if args.cuda:
     model.cuda()
 # end if
@@ -133,13 +156,13 @@ best_acc = 0.0
 optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 # For each iteration
-for epoch in range(n_epoch):
+for epoch in range(args.epoch):
     # Total losses
     training_loss = 0.0
     training_total = 0.0
 
     # For each training examples
-    for batch in batches:
+    for i, batch in enumerate(training_set):
         # Inputs and label
         inputs, truth = batch
 
@@ -167,59 +190,62 @@ for epoch in range(n_epoch):
         optimizer.step()
     # end for
 
-    # Counters
-    test_diff = 0
-    test_total = 0
+    # Validation losses
+    validation_loss = 0.0
+    validation_total = 0.0
+    success = 0.0
+    total = 0.0
+    random = 0.0
 
-    # For each test sample
-    for i, data in enumerate(pan18loader_valid):
-        # Parts and c
-        inputs, truth = data
+    # For each validation examples
+    for i, batch in enumerate(validation_set):
+        # Inputs and label
+        inputs, truth = batch
 
-        # Different parts to measure
-        parts = list()
+        # To variable
+        inputs, truth = Variable(inputs), Variable(truth)
+        if args.cuda:
+            inputs, truth = inputs.cuda(), truth.cuda()
+        # end if
 
-        # Get each parts
-        for j in torch.arange(0, inputs.size(1) - settings.cnn_window_size, settings.stride):
-            # Add
-            parts.append(inputs[:, int(j):int(j) + settings.cnn_window_size])
-        # end for
+        # TRAINING
+        model_output = model(inputs).squeeze(dim=1)
 
-        # Number of parts
-        n_parts = len(parts)
+        # Loss
+        loss = loss_function(model_output, truth)
 
-        # Matrix of distance
-        distance_matrix = torch.FloatTensor(n_parts, n_parts).fill_(0.0)
+        # Take the max as predicted
+        _, predicted = torch.max(model_output.data, 1)
 
-        # For all combination
-        for n in range(n_parts):
-            for m in range(n_parts):
-                # Inputs
-                concate = torch.cat((parts[n], parts[m]), dim=1)
+        # Add to correctly classified text
+        random += truth.data.sum()
+        success += (predicted == truth.data).sum()
 
-                # Variable
-                concate = Variable(concate)
-                if args.cuda:
-                    concate = concate.cuda()
-                # end if
+        # Counter
+        total += truth.size(0)
 
-                # Model
-                model_output = model(concate)
-
-                # Distance
-                distance_matrix[n, m] = float(model_output[0])
-            # end for
-        # end for
-
-        # Max
-        max_dist = torch.max(distance_matrix)
-
-        # Diff
-        diff = float(truth[0]) - max_dist
-        test_diff += diff * diff
-        test_total += 1.0
+        # Add
+        validation_loss += loss.data[0]
+        validation_total += 1.0
     # end for
 
+    # Accuracy
+    accuracy = success / total * 100.0
+
     # Show
-    print(u"Epoch {}, accuracy : {}".format(epoch, 1.0 / test_total * math.sqrt(test_diff)))
+    print(u"Epoch {}, training loss : {}, validation loss : {}, accuracy : {} ({})".format(epoch, training_loss / training_total, validation_loss / validation_total, accuracy, random / total * 100.0))
+
+    # Save if better
+    if accuracy > best_acc:
+        best_acc = accuracy
+        print(u"Saving model with best accuracy {}".format(best_acc))
+        torch.save(
+            transforms.transforms[2].token_to_ix,
+            open(args.output, 'wb')
+        )
+        torch.save(
+            model.state_dict(),
+            open(args.output, 'wb')
+        )
+    # end if
 # end for

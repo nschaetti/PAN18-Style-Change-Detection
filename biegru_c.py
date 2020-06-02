@@ -4,8 +4,7 @@
 # Imports
 import torch.utils.data
 import dataset
-from settings import settings
-from settings import functions
+from tools import functions, settings
 from torchlanguage import models
 from torch.autograd import Variable
 from torch import nn
@@ -25,17 +24,17 @@ stride = 100
 args = functions.argument_parser_training_model()
 
 # Get transforms
-transforms = functions.text_transformer(args.n_gram, settings.window_size)
+transforms = functions.text_transformer(args.n_gram, settings.gru_window_size)
 
 # Style change detection dataset, training set
 pan18loader_train = torch.utils.data.DataLoader(
-    dataset.SCDSimpleDataset(root='./extended/', download=True, transform=transforms, train=True),
+    dataset.SCDSimpleDataset(root='./recalib/', download=True, transform=transforms, train=True),
     batch_size=1
 )
 
 # Style change detection dataset, validation set
 pan18loader_valid = torch.utils.data.DataLoader(
-    dataset.SCDSimpleDataset(root='./extended/', download=True, transform=transforms, train=False),
+    dataset.SCDSimpleDataset(root='./recalib/', download=True, transform=transforms, train=False),
     batch_size=1
 )
 
@@ -46,7 +45,9 @@ loss_function = nn.CrossEntropyLoss()
 model = models.BiEGRU(window_size=settings.window_size,
                       vocab_size=settings.voc_sizes[args.n_gram],
                       hidden_dim=settings.hidden_dim,
-                      n_classes=2)
+                      n_classes=2,
+                      out_channels=(25, 25, 25),
+                      embedding_dim=50)
 if args.cuda:
     model.cuda()
 # end if

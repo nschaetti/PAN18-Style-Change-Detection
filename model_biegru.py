@@ -3,7 +3,7 @@
 
 # Imports
 import torch.utils.data
-import dataset
+import os
 from tools import functions, settings
 from torchlanguage import models
 from torch.autograd import Variable
@@ -18,7 +18,7 @@ args = functions.argument_parser_training_model()
 transforms = functions.text_transformer(args.n_gram, settings.gru_window_size)
 
 # Style change detection dataset, training set
-pan18loader_train, pan18loader_valid = functions.load_dataset(transforms, args.batch_size, args.root)
+pan18loader_train, pan18loader_valid = functions.load_dataset(transforms, 1, args.root)
 
 # Loss function
 loss_function = nn.CrossEntropyLoss()
@@ -28,8 +28,8 @@ model = models.BiEGRU(window_size=settings.gru_window_size,
                       vocab_size=settings.voc_sizes[args.n_gram],
                       hidden_dim=settings.hidden_dim,
                       n_classes=2,
-                      out_channels=(25, 25, 25),
-                      embedding_dim=50)
+                      out_channels=(args.n_filters, args.n_filters, args.n_filters),
+                      embedding_dim=args.dim)
 if args.cuda:
     model.cuda()
 # end if
@@ -53,13 +53,11 @@ for epoch in range(args.epoch):
     test_loss = 0.0
     test_total = 0.0
     changes = 0.0
-    loss = 0.0
 
     # Get training data
-    batch = 0
     for i, data in enumerate(pan18loader_train):
         # Inputs and c
-        inputs, label = data
+        inputs, label, _ = data
 
         # To variable
         inputs, label = Variable(inputs.view(-1, settings.gru_window_size)), Variable(label)
@@ -74,30 +72,22 @@ for epoch in range(args.epoch):
         model_output, hidden = model(inputs, hidden)
 
         # Loss
-        sample_loss = loss_function(model_output, label)
+        loss = loss_function(model_output, label)
 
         # Add
-        if batch == 0:
-            loss = sample_loss
-        else:
-            loss += sample_loss
-        # end if
-        training_loss += sample_loss.data[0]
+        training_loss += loss.data[0]
         training_total += 1.0
 
         # Backward if last sample
-        if batch == args.batch_size - 1:
-            # Backward and step
+        if i != 25577:
+            loss.backward(retain_graph=True)
+        else:
             loss.backward()
-            optimizer.step()
         # end if
-
-        # Batch
-        batch += 1
-        if batch >= args.batch_size:
-            batch = 0
-        # end if
+        optimizer.step()
+        print u"\r" + str(i),
     # end for
+    print(u"\n")
 
     # Counters
     total = 0.0
@@ -106,7 +96,7 @@ for epoch in range(args.epoch):
     # Validation
     for i, data in enumerate(pan18loader_valid):
         # Inputs and c
-        inputs, label = data
+        inputs, label, _ = data
 
         # To variable
         inputs, label = Variable(inputs.view(-1, settings.gru_window_size)), Variable(label)
@@ -132,11 +122,34 @@ for epoch in range(args.epoch):
         total += 1.0
     # end for
 
+    # Accuracy
+    accuracy = 100.0 * success / total
+
     # Show
     print(u"Epoch {}, training loss {}, test loss {}, validation {}".format(
         epoch,
         training_loss,
         test_loss,
-        100.0 * success / total
+        accuracy
     ))
+
+    # Save if better
+    if accuracy > best_acc:
+        best_acc = accuracy
+        print(u"Saving model with best accuracy {}".format(best_acc))
+        torch.save(
+            transforms.transforms[2].token_to_ix,
+            open(
+                os.path.join(args.output, "biegru.voc.pth"),
+                mode='wb'
+            )
+        )
+        torch.save(
+            model.state_dict(),
+            open(
+                os.path.join(args.output, "biegru.pth"),
+                mode='wb'
+            )
+        )
+    # end if
 # end for

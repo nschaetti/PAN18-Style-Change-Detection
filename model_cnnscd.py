@@ -17,7 +17,7 @@ from tools import functions
 args = functions.argument_parser_training_model()
 
 # CNN text transformer
-transforms = functions.text_transformer_cnn(settings.cnn_window_size, args.n_gram)
+transforms = functions.text_transformer_cnn(settings.cnn_window_size, args.n_gram, token_to_ix=dict())
 
 # Style change detection dataset, training set
 pan18loader_train, pan18loader_valid = functions.load_dataset(transforms, args.batch_size, args.root)
@@ -34,13 +34,14 @@ model = models.CNNSCD(
     n_linear=args.n_linear,
     linear_size=args.linear_size,
     max_pool_size=args.max_pool_size,
-    max_pool_stride=args.max_pool_stride
+    max_pool_stride=args.max_pool_stride,
+    use_dropout=True
 )
 if args.cuda:
     model.cuda()
 # end if
 best_model = copy.deepcopy(model.state_dict())
-best_acc = 0.0
+best_acc = 10000
 
 # Optimizer
 optimizer = optim.SGD(model.parameters(), lr=0.0005, momentum=0.9)
@@ -51,13 +52,18 @@ for epoch in range(args.epoch):
     training_loss = 0.0
     training_total = 0.0
 
+    # Train
+    model.train()
+    n_changes = 0.0
+    n_total = 0.0
     # For each training sample
-    for i, data in enumerate(pan18loader_valid):
+    for i, data in enumerate(pan18loader_train):
         # Parts and c
         inputs, truth, _ = data
-
+        n_changes += (truth == 1).sum()
+        n_total += truth.size(0)
         # To variable
-        inputs, truth = Variable(inputs), Variable(truth)
+        """inputs, truth = Variable(inputs), Variable(truth)
         if args.cuda:
             inputs, truth = inputs.cuda(), truth.cuda()
         # end if
@@ -77,22 +83,28 @@ for epoch in range(args.epoch):
 
         # Backward and step
         loss.backward()
-        optimizer.step()
+        optimizer.step()"""
     # end for
+    print(n_changes)
+    print(n_total)
+    # Eval
+    model.eval()
 
     # Validation losses
     validation_loss = 0.0
     validation_total = 0.0
     success = 0.0
     total = 0.0
-
+    n_changes = 0.0
+    n_total = 0.0
     # For each validation sample
     for i, data in enumerate(pan18loader_valid):
         # Parts and c
         inputs, truth, _ = data
-
+        n_changes += (truth == 1).sum()
+        n_total += truth.size(0)
         # To variable
-        inputs, truth = Variable(inputs), Variable(truth)
+        """inputs, truth = Variable(inputs), Variable(truth)
         if args.cuda:
             inputs, truth = inputs.cuda(), truth.cuda()
         # end if
@@ -114,9 +126,11 @@ for epoch in range(args.epoch):
 
         # Add
         validation_loss += loss.data[0]
-        validation_total += 1.0
+        validation_total += 1.0"""
     # end for
-
+    print(n_changes)
+    print(n_total)
+    exit()
     # Accuracy
     accuracy = success / total * 100.0
 
@@ -129,8 +143,8 @@ for epoch in range(args.epoch):
     )
 
     # Save if better
-    if accuracy > best_acc:
-        best_acc = accuracy
+    if validation_loss / validation_total < best_acc:
+        best_acc = validation_loss / validation_total
         print(u"Saving model with best accuracy {}".format(best_acc))
         torch.save(
             transforms.transforms[2].token_to_ix,
